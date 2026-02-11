@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  secondmeUserId  String   @unique @map("secondme_user_id")
+  email           String?
+  name            String?
+  avatarUrl       String?  @map("avatar_url")
+  accessToken     String   @map("access_token")
+  refreshToken    String   @map("refresh_token")
+  tokenExpiresAt  DateTime @map("token_expires_at")
+  mbti            String?
+  intent          String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  agent       AgentProfile?
+  simulations SimulationSession[]
+  reports     MatchReport[]
+  tournaments Tournament[]
+
+  @@map("users")
+}
+
+model AgentProfile {
+  id            String   @id @default(cuid())
+  userId        String?  @unique @map("user_id")
+  source        String   @default("USER")
+  displayName   String   @map("display_name")
+  avatarUrl     String?  @map("avatar_url")
+  mbti          String
+  traits        Json?
+  intent        String?
+  promptPersona String   @map("prompt_persona")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user        User?               @relation(fields: [userId], references: [id])
+  sessionsAsA SimulationSession[] @relation("AgentA")
+  sessionsAsB SimulationSession[] @relation("AgentB")
+  candidacies TournamentCandidate[]
+
+  @@map("agent_profiles")
+}
+
+model Tournament {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  candidateCount Int     @map("candidate_count")
+  status        String   @default("PENDING")
+  currentPhase  String?  @map("current_phase")
+  winnerId      String?  @map("winner_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  finishedAt    DateTime? @map("finished_at")
+
+  user       User                  @relation(fields: [userId], references: [id])
+  candidates TournamentCandidate[]
+  sessions   SimulationSession[]
+  report     MatchReport?
+
+  @@map("tournaments")
+}
+
+model TournamentCandidate {
+  id           String   @id @default(cuid())
+  tournamentId String   @map("tournament_id")
+  agentId      String   @map("agent_id")
+  status       String   @default("ACTIVE")
+  rank         Int?
+  totalScore   Float?   @map("total_score")
+  eliminatedAt String?  @map("eliminated_at_phase")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  agent      AgentProfile @relation(fields: [agentId], references: [id])
+  sessions   SimulationSession[]
+
+  @@map("tournament_candidates")
+}
+
+model SimulationSession {
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  agentAId        String    @map("agent_a_id")
+  agentBId        String    @map("agent_b_id")
+  tournamentId    String?   @map("tournament_id")
+  candidateId     String?   @map("candidate_id")
+  status          String    @default("QUEUED")
+  overallScore    Float?    @map("overall_score")
+  matched         Boolean?
+  terminateReason String?   @map("terminate_reason")
+  startedAt       DateTime? @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  user      User                  @relation(fields: [userId], references: [id])
+  agentA    AgentProfile          @relation("AgentA", fields: [agentAId], references: [id])
+  agentB    AgentProfile          @relation("AgentB", fields: [agentBId], references: [id])
+  tournament Tournament?          @relation(fields: [tournamentId], references: [id])
+  candidate  TournamentCandidate? @relation(fields: [candidateId], references: [id])
+  rounds    SimulationRound[]
+  report    MatchReport?
+
+  @@map("simulation_sessions")
+}
+
+model SimulationRound {
+  id          String   @id @default(cuid())
+  sessionId   String   @map("session_id")
+  scenario    String
+  score       Int
+  scoreReason String?  @map("score_reason")
+  scoreDetail Json?    @map("score_detail")
+  roundCount  Int      @default(3) @map("round_count")
+  result      String   @default("PASS")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  session  SimulationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messages RoundMessage[]
+
+  @@map("simulation_rounds")
+}
+
+model RoundMessage {
+  id        String   @id @default(cuid())
+  roundId   String   @map("round_id")
+  role      String
+  content   String
+  seq       Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  round SimulationRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@map("round_messages")
+}
+
+model MatchReport {
+  id                 String   @id @default(cuid())
+  sessionId          String   @unique @map("session_id")
+  userId             String   @map("user_id")
+  tournamentId       String?  @unique @map("tournament_id")
+  compatibilityScore Float    @map("compatibility_score")
+  highlights         Json?
+  recommendation     String?
+  dimensionScores    Json?    @map("dimension_scores")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  session    SimulationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id])
+  tournament Tournament?       @relation(fields: [tournamentId], references: [id])
+
+  @@map("match_reports")
+}
