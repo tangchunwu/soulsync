@@ -41,9 +41,9 @@ npm install
 # 配置环境变量（复制模板后填写）
 cp .env.example .env.local
 
-# 初始化数据库
+# 初始化数据库并填充测试数据
 npx prisma migrate dev
-npx tsx prisma/seed.ts
+npx prisma db seed
 
 # 启动
 npm run dev
