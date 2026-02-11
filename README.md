@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SoulSync
 
-## Getting Started
+让 AI Agent 替你找到灵魂伴侣。
 
-First, run the development server:
+SoulSync 是一个基于 AI Agent 的社交匹配平台。你创建一个代表自己性格的 Agent，它会自动和其他 Agent 聊天、互动、做默契测试，最终帮你筛选出最合拍的人。
+
+## 它是怎么工作的
+
+1. 登录后填写你的 MBTI 和社交意图，系统会生成一个专属 Agent
+2. 选择匹配模式：
+   - **经典 1v1** — 你的 Agent 和一个随机对手进行三场对话（破冰、价值观、共情）
+   - **锦标赛模式** — 选 3/5/10 个候选人，四阶段淘汰赛，最终决出最佳匹配
+3. 全程实时观看 Agent 之间的对话，看它们怎么替你"相亲"
+4. 匹配完成后查看详细报告和四维评分雷达图
+
+## 锦标赛四个阶段
+
+| 阶段 | 内容 | 说明 |
+|------|------|------|
+| 破冰 | 聊兴趣爱好、审美偏好 | 淘汰约一半候选人 |
+| 价值观 | 聊人生目标、金钱观、家庭观 | 继续淘汰 |
+| 共情 | 压力场景下的情绪回应 | 留下最后 1-2 人 |
+| 默契游戏 | 5 道情境选择题，独立作答后比较 | 决出冠军 |
+
+每个阶段从四个维度打分：幽默感、深度、共鸣、兼容性。
+
+## 技术栈
+
+- Next.js 16 + React 19 + TypeScript
+- Prisma + SQLite
+- OpenAI 兼容 LLM API
+- Tailwind CSS
+- SSE 实时推送
+
+## 本地运行
 
 ```bash
+# 安装依赖
+npm install
+
+# 配置环境变量（复制模板后填写）
+cp .env.example .env.local
+
+# 初始化数据库
+npx prisma migrate dev
+npx tsx prisma/seed.ts
+
+# 启动
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 http://localhost:3000 即可使用。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 环境变量
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 变量 | 说明 |
+|------|------|
+| `DATABASE_URL` | 数据库连接（默认 `file:./dev.db`） |
+| `LLM_BASE_URL` | LLM API 地址 |
+| `LLM_API_KEY` | LLM API 密钥 |
+| `LLM_MODEL` | 模型名称（默认 `gpt-4o-mini`） |
+| `SECONDME_API_BASE_URL` | SecondMe OAuth 服务地址 |
+| `SECONDME_CLIENT_ID` | SecondMe OAuth Client ID |
+| `SECONDME_CLIENT_SECRET` | SecondMe OAuth Client Secret |
 
-## Learn More
+## 项目结构
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+├── app/
+│   ├── dashboard/          # 匹配中心主页面 + 组件
+│   ├── report/             # 匹配报告页
+│   ├── onboarding/         # 新用户引导
+│   └── api/                # 后端 API
+│       ├── tournaments/    # 锦标赛相关
+│       ├── simulations/    # 单场匹配相关
+│       └── auth/           # 登录认证
+└── lib/
+    ├── tournament-engine.ts  # 锦标赛引擎
+    ├── simulation-engine.ts  # 单场对话引擎
+    ├── scoring.ts            # 四维评分系统
+    ├── prompt-templates.ts   # 场景和人设模板
+    └── llm.ts                # LLM 调用封装
+```
