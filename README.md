@@ -59,9 +59,12 @@ npm run dev
 | `LLM_BASE_URL` | LLM API 地址 |
 | `LLM_API_KEY` | LLM API 密钥 |
 | `LLM_MODEL` | 模型名称（默认 `gpt-4o-mini`） |
-| `SECONDME_API_BASE_URL` | SecondMe OAuth 服务地址 |
+| `SECONDME_API_BASE_URL` | SecondMe API 地址 |
+| `SECONDME_OAUTH_URL` | SecondMe OAuth 授权页地址 |
+| `SECONDME_TOKEN_ENDPOINT` | SecondMe OAuth Token 接口 |
 | `SECONDME_CLIENT_ID` | SecondMe OAuth Client ID |
 | `SECONDME_CLIENT_SECRET` | SecondMe OAuth Client Secret |
+| `SECONDME_REDIRECT_URI` | OAuth 回调地址（默认 `http://localhost:3000/api/auth/callback`） |
 
 ## 项目结构
 
