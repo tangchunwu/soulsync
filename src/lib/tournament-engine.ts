@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { chatCompletion } from "./llm";
+import { chatWithSecondMe } from "./secondme";
 import { SCENARIOS, ScenarioKey, GAME_QUESTIONS } from "./prompt-templates";
 import { judgeRoundMultiDim, MultiDimResult, DimensionScores } from "./scoring";
 import { runScenario, AgentData, avg } from "./simulation-engine";
@@ -37,7 +38,7 @@ async function emitTournamentEvent(tournamentId: string, event: string, data: un
 }
 
 /* ── 主编排函数 ── */
-export async function runTournament(tournamentId: string) {
+export async function runTournament(tournamentId: string, secondMeToken?: string) {
   const tournament = await prisma.tournament.findUniqueOrThrow({
     where: { id: tournamentId },
     include: {
@@ -120,9 +121,9 @@ export async function runTournament(tournamentId: string) {
 
       // 并发执行当前阶段
       if (scenarioKey === "GAME") {
-        await runGamePhase(tournamentId, activeCandidates, userAgent);
+        await runGamePhase(tournamentId, activeCandidates, userAgent, secondMeToken);
       } else {
-        await runDialoguePhase(tournamentId, scenarioKey, activeCandidates, userAgent);
+        await runDialoguePhase(tournamentId, scenarioKey, activeCandidates, userAgent, secondMeToken);
       }
 
       // 淘汰排名靠后的候选人
@@ -250,13 +251,14 @@ async function runDialoguePhase(
   scenarioKey: ScenarioKey,
   candidates: CandidateRuntime[],
   userAgent: AgentData,
+  secondMeToken?: string,
 ) {
   const roundCount = scenarioKey === "ICEBREAK" ? 3 : scenarioKey === "DEEPVALUE" ? 4 : 5;
 
   const results = await Promise.allSettled(
     candidates.map(async (candidate) => {
-      // 复用 simulation-engine 的 runScenario
-      await runScenario(candidate.sessionId, scenarioKey, userAgent, candidate.agent, roundCount);
+      // 复用 simulation-engine 的 runScenario（Agent A 走 SecondMe）
+      await runScenario(candidate.sessionId, scenarioKey, userAgent, candidate.agent, roundCount, secondMeToken);
 
       // 获取对话记录用于多维评分
       const round = await prisma.simulationRound.findFirst({
@@ -302,6 +304,7 @@ async function runGamePhase(
   tournamentId: string,
   candidates: CandidateRuntime[],
   userAgent: AgentData,
+  secondMeToken?: string,
 ) {
   const questions = GAME_QUESTIONS;
 
@@ -327,16 +330,24 @@ async function runGamePhase(
       for (const q of questions) {
         const questionText = `${q.question}\n选项：${q.options.join("、")}\n请选择一个选项并简要说明理由（2-3句话）。`;
 
-        // Agent A 独立作答
-        const aReply = await chatCompletion([
-          { role: "system", content: `${userAgent.promptPersona}\n场景：${scenario.system}\n请独立回答以下问题，不要参考他人答案。` },
-          { role: "user", content: questionText },
-        ]);
+        // Agent A 独立作答（走 SecondMe 或降级 LLM）
+        let aReply: string;
+        if (secondMeToken) {
+          const smResult = await chatWithSecondMe(secondMeToken, questionText, {
+            systemPrompt: `${scenario.system}\n请独立回答以下问题，不要参考他人答案。`,
+          });
+          aReply = smResult.reply;
+        } else {
+          aReply = await chatCompletion([
+            { role: "system", content: `${userAgent.promptPersona}\n场景：${scenario.system}\n请独立回答以下问题，不要参考他人答案。` },
+            { role: "user", content: questionText },
+          ]);
+        }
         await prisma.roundMessage.create({
           data: { roundId: round.id, role: "AGENT_A", content: aReply, seq: seq++ },
         });
 
-        // Agent B 独立作答
+        // Agent B 独立作答（SEED 对手，始终走 LLM）
         const bReply = await chatCompletion([
           { role: "system", content: `${candidate.agent.promptPersona}\n场景：${scenario.system}\n请独立回答以下问题，不要参考他人答案。` },
           { role: "user", content: questionText },

@@ -66,13 +66,25 @@ export async function GET(req: NextRequest) {
 
     await setAuthCookie(user.id);
 
-    // 新用户去 onboarding，老用户去 dashboard
-    const hasAgent = await prisma.agentProfile.findUnique({
+    // 自动创建 AgentProfile（基于 SecondMe 真实身份，无需手动 onboarding）
+    const displayName = userInfo.name || "My Agent";
+    await prisma.agentProfile.upsert({
       where: { userId: user.id },
+      update: {
+        displayName,
+        avatarUrl: userInfo.avatar || userInfo.avatarUrl,
+      },
+      create: {
+        userId: user.id,
+        source: "SECONDME",
+        displayName,
+        avatarUrl: userInfo.avatar || userInfo.avatarUrl,
+        mbti: "UNKNOWN",
+        promptPersona: `你是 ${displayName} 的数字分身，由 SecondMe 驱动。`,
+      },
     });
-    const redirectPath = hasAgent ? "/dashboard" : "/onboarding";
 
-    return NextResponse.redirect(new URL(redirectPath, req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   } catch (e) {
     console.error("OAuth callback error:", e);
     return NextResponse.redirect(new URL("/?error=auth_failed", req.url));

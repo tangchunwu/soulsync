@@ -1,4 +1,5 @@
 import { chatCompletion } from "./llm";
+import { chatWithSecondMe } from "./secondme";
 import { judgeRound } from "./scoring";
 import { SCENARIOS, ScenarioKey } from "./prompt-templates";
 import { prisma } from "./prisma";
@@ -11,8 +12,8 @@ export interface AgentData {
   displayName: string;
 }
 
-/* ── 单场模拟（保留原有逻辑） ── */
-export async function runSimulation(sessionId: string) {
+/* ── 单场模拟 ── */
+export async function runSimulation(sessionId: string, secondMeToken?: string) {
   const session = await prisma.simulationSession.findUniqueOrThrow({
     where: { id: sessionId },
     include: { agentA: true, agentB: true },
@@ -28,7 +29,7 @@ export async function runSimulation(sessionId: string) {
 
   try {
     for (const key of scenarioKeys) {
-      const result = await runScenario(sessionId, key, session.agentA, session.agentB);
+      const result = await runScenario(sessionId, key, session.agentA, session.agentB, 3, secondMeToken);
 
       scores.push(result.score);
 
@@ -87,6 +88,7 @@ export async function runScenario(
   agentA: AgentData,
   agentB: AgentData,
   roundCount: number = 3,
+  secondMeToken?: string,
 ) {
   const scenario = SCENARIOS[scenarioKey];
   const messages: { role: string; content: string }[] = [];
@@ -103,22 +105,42 @@ export async function runScenario(
   });
 
   let seq = 0;
+  // SecondMe 会话 ID，跨轮次保持上下文
+  let smSessionId: string | undefined;
 
   for (let i = 0; i < roundCount; i++) {
-    // Agent A 发言
-    const aReply = await chatCompletion([
-      { role: "system", content: `${agentA.promptPersona}\n场景：${scenario.system}` },
-      ...messages.map((m) => ({
-        role: (m.role === "AGENT_A" ? "assistant" : "user") as "assistant" | "user",
-        content: m.content,
-      })),
-    ]);
+    // ── Agent A 发言 ──
+    let aReply: string;
+
+    if (secondMeToken) {
+      // 走 SecondMe 对话 API（用户的数字分身）
+      const prompt = i === 0
+        ? `你正在参加一个社交匹配活动。场景：${scenario.system}\n请先开始对话，展现你的真实性格。`
+        : messages[messages.length - 1].content; // 对手上一轮的回复
+
+      const smResult = await chatWithSecondMe(secondMeToken, prompt, {
+        sessionId: smSessionId,
+        systemPrompt: i === 0 ? `场景：${scenario.system}` : undefined,
+      });
+      aReply = smResult.reply;
+      if (smResult.sessionId) smSessionId = smResult.sessionId;
+    } else {
+      // 降级：走 LLM
+      aReply = await chatCompletion([
+        { role: "system", content: `${agentA.promptPersona}\n场景：${scenario.system}` },
+        ...messages.map((m) => ({
+          role: (m.role === "AGENT_A" ? "assistant" : "user") as "assistant" | "user",
+          content: m.content,
+        })),
+      ]);
+    }
+
     messages.push({ role: "AGENT_A", content: aReply });
     await prisma.roundMessage.create({
       data: { roundId: round.id, role: "AGENT_A", content: aReply, seq: seq++ },
     });
 
-    // Agent B 发言
+    // ── Agent B 发言（SEED 对手，始终走 LLM） ──
     const bReply = await chatCompletion([
       { role: "system", content: `${agentB.promptPersona}\n场景：${scenario.system}` },
       ...messages.map((m) => ({
@@ -132,7 +154,7 @@ export async function runScenario(
     });
   }
 
-  // 裁判评分
+  // ── 裁判评分（始终走 LLM） ──
   const judge = await judgeRound(scenario.label, messages);
 
   await prisma.simulationRound.update({
