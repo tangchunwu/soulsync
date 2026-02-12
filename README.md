@@ -1,17 +1,27 @@
 # SoulSync
 
-让 AI Agent 替你找到灵魂伴侣。
+让你的数字分身替你找到灵魂伴侣。
 
-SoulSync 是一个基于 AI Agent 的社交匹配平台。你创建一个代表自己性格的 Agent，它会自动和其他 Agent 聊天、互动、做默契测试，最终帮你筛选出最合拍的人。
+SoulSync 是一个基于 SecondMe 数字分身的 AI 社交匹配平台。你用 SecondMe 登录后，你的数字分身会自动与平台上的真实用户进行多轮淘汰赛式对话，由 LLM 裁判从幽默、深度、共鸣、契合度四个维度评分，最终找到最佳匹配对象。
 
 ## 它是怎么工作的
 
-1. 登录后填写你的 MBTI 和社交意图，系统会生成一个专属 Agent
+1. 用 SecondMe 账号登录，系统自动创建你的数字分身 Agent
 2. 选择匹配模式：
-   - **经典 1v1** — 你的 Agent 和一个随机对手进行三场对话（破冰、价值观、共情）
-   - **锦标赛模式** — 选 3/5/10 个候选人，四阶段淘汰赛，最终决出最佳匹配
-3. 全程实时观看 Agent 之间的对话，看它们怎么替你"相亲"
+   - **经典 1v1** — 你的分身和一个真实用户进行三场对话（破冰、价值观、共情）
+   - **锦标赛模式** — 选 3/5/10 个真实候选人，四阶段淘汰赛，最终决出最佳匹配
+3. 全程实时观看分身之间的对话，看它们怎么替你"相亲"
 4. 匹配完成后查看详细报告和四维评分雷达图
+
+## 架构：谁在说话，谁在打分
+
+| 角色 | 技术方案 | 说明 |
+|------|---------|------|
+| 你的分身（Agent A） | SecondMe Chat API | 你在 SecondMe 上训练的真实数字分身，通过 SSE 流式对话 |
+| 对手（Agent B） | SecondmeBook 真实档案 + LLM | 从 SecondmeBook 拉取真实用户的性格、MBTI、自我介绍，LLM 加载人设模拟对话 |
+| 裁判 | LLM | 对每轮对话做四维评分，决定淘汰和最终排名 |
+
+对手不是编造的假人，而是 SecondMe 平台上真实存在的用户档案。
 
 ## 锦标赛四个阶段
 
@@ -28,17 +38,18 @@ SoulSync 是一个基于 AI Agent 的社交匹配平台。你创建一个代表�
 
 - Next.js 16 + React 19 + TypeScript
 - Prisma + SQLite
-- OpenAI 兼容 LLM API
+- SecondMe OAuth2 + Chat API + SecondmeBook API
+- OpenAI 兼容 LLM API（仅用于对手模拟和裁判评分）
 - Tailwind CSS
 - SSE 实时推送
 
 ## 本地运行
 
-运行这个项目之前，你需要先准备两样东西：一个大模型 API 和一个 SecondMe 账号。下面会教你怎么搞。
+运行这个项目之前，你需要先准备两样东西：一个大模型 API 和一个 SecondMe 账号。
 
 ### 第一步：准备大模型 API
 
-项目需要调用大语言模型来驱动 Agent 对话和评分。任何兼容 OpenAI 接口格式的服务都行，推荐以下几个：
+项目需要调用大语言模型来模拟对手对话和裁判评分。任何兼容 OpenAI 接口格式的服务都行：
 
 | 服务商 | 注册地址 | 推荐模型 | 说明 |
 |--------|----------|----------|------|
@@ -50,9 +61,9 @@ SoulSync 是一个基于 AI Agent 的社交匹配平台。你创建一个代表�
 
 ### 第二步：准备 SecondMe 账号
 
-SoulSync 使用 [Second Me](https://second.me) 作为用户登录系统。你需要：
+SoulSync 使用 [Second Me](https://second.me) 作为用户身份和数字分身系统。你需要：
 
-1. 访问 https://second.me 注册一个账号
+1. 访问 https://second.me 注册一个账号，训练你的数字分身
 2. 在开发者设置中创建一个 OAuth 应用
 3. 回调地址填 `http://localhost:3000/api/auth/callback`
 4. 创建完成后你会拿到 `Client ID` 和 `Client Secret`
@@ -119,12 +130,12 @@ src/
 ├── app/
 │   ├── dashboard/          # 匹配中心主页面 + 组件
 │   ├── report/             # 匹配报告页
-│   ├── onboarding/         # 新用户引导
 │   └── api/                # 后端 API
 │       ├── tournaments/    # 锦标赛相关
 │       ├── simulations/    # 单场匹配相关
 │       └── auth/           # 登录认证
 └── lib/
+    ├── secondme.ts           # SecondMe + SecondmeBook API 封装
     ├── tournament-engine.ts  # 锦标赛引擎
     ├── simulation-engine.ts  # 单场对话引擎
     ├── scoring.ts            # 四维评分系统
