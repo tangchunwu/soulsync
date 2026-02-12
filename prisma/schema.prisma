@@ -18,6 +18,8 @@ model User {
   tokenExpiresAt  DateTime @map("token_expires_at")
   mbti            String?
   intent          String?
+  matchable       Boolean  @default(true)
+  lastActiveAt    DateTime @default(now()) @map("last_active_at")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -39,6 +41,9 @@ model AgentProfile {
   traits        Json?
   intent        String?
   promptPersona String   @map("prompt_persona")
+  bookUserId    String?  @map("book_user_id")
+  bookBio       String?  @map("book_bio")
+  bookSelfIntro String?  @map("book_self_intro")
   isActive      Boolean  @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
 
@@ -92,6 +97,7 @@ model SimulationSession {
   agentBId        String    @map("agent_b_id")
   tournamentId    String?   @map("tournament_id")
   candidateId     String?   @map("candidate_id")
+  conversationType String   @default("SIMULATED") @map("conversation_type")
   status          String    @default("QUEUED")
   overallScore    Float?    @map("overall_score")
   matched         Boolean?

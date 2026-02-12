@@ -9,6 +9,7 @@ export interface CandidateInfo {
   totalScore?: number;
   latestScore?: number;
   dimensions?: { humor: number; depth: number; resonance: number; compatibility: number };
+  source?: "REGISTERED" | "BOOK" | "SEED";
 }
 
 interface CandidateCardProps {
@@ -59,6 +60,18 @@ export default function CandidateCard({ candidate, isSelected, onClick }: Candid
       <div className="w-full truncate text-center text-xs font-semibold text-gray-800">
         {candidate.displayName}
       </div>
+
+      {/* 来源标签 */}
+      {candidate.source === "REGISTERED" && (
+        <div className="rounded px-2 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700">
+          真实分身
+        </div>
+      )}
+      {candidate.source === "BOOK" && (
+        <div className="rounded px-2 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700">
+          模拟对话
+        </div>
+      )}
 
       {/* MBTI */}
       <div className={`rounded px-2 py-0.5 text-[10px] font-medium ${

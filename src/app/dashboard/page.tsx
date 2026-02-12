@@ -13,7 +13,7 @@ type OldRoundMessage = { id: string; role: string; content: string; seq: number 
 type OldStreamingMessage = { id: string; role: string; content: string; seq: number; scenario: string };
 type OldRound = { id: string; scenario: string; score: number; scoreReason: string; result: string; messages: OldRoundMessage[] };
 type OldDoneEvent = { status: string; overallScore: number | null; matched: boolean | null; terminateReason: string | null };
-type OldOpponent = { displayName: string; mbti: string };
+type OldOpponent = { displayName: string; mbti: string; source?: "REGISTERED" | "BOOK" | "SEED" };
 
 /* ── 锦标赛类型 ── */
 type TournamentRanking = {
@@ -86,7 +86,7 @@ function ClassicRadar({ phase, onStart, score }: { phase: "idle" | "scanning" | 
   );
 }
 
-function ClassicChatLog({ rounds, liveMessages, logRef }: { rounds: OldRound[]; liveMessages: OldStreamingMessage[]; logRef: React.RefObject<HTMLDivElement | null> }) {
+function ClassicChatLog({ rounds, liveMessages, logRef, conversationType }: { rounds: OldRound[]; liveMessages: OldStreamingMessage[]; logRef: React.RefObject<HTMLDivElement | null>; conversationType: "A2A" | "SIMULATED" }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const roundMsgIds = new Set(rounds.flatMap((r) => r.messages.map((m) => m.id)));
   const pendingMessages = liveMessages.filter((m) => !roundMsgIds.has(m.id));
@@ -95,6 +95,11 @@ function ClassicChatLog({ rounds, liveMessages, logRef }: { rounds: OldRound[]; 
   const hasContent = rounds.length > 0 || pendingMessages.length > 0;
   if (!hasContent) return null;
   const toggle = (id: string) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const bLabel = conversationType === "A2A" ? "对方分身" : "模拟 Agent";
+  const bBubbleBg = conversationType === "A2A" ? "rounded-bl-md bg-emerald-50 text-gray-800" : "rounded-bl-md bg-gray-100 text-gray-800";
+  const bLabelColor = conversationType === "A2A" ? "text-emerald-500" : "text-gray-400";
+  const bAvatarBg = conversationType === "A2A" ? "bg-emerald-500" : "bg-gray-400";
 
   return (
     <div ref={logRef} className="mb-6 max-h-[520px] overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -115,9 +120,9 @@ function ClassicChatLog({ rounds, liveMessages, logRef }: { rounds: OldRound[]; 
                   const isA = msg.role === "AGENT_A";
                   return (
                     <div key={msg.id} className={`flex items-end gap-2 ${isA ? "flex-row-reverse" : "flex-row"}`}>
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${isA ? "bg-blue-500" : "bg-gray-400"}`}>{isA ? "A" : "B"}</div>
-                      <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${isA ? "rounded-br-md bg-blue-600 text-white" : "rounded-bl-md bg-gray-100 text-gray-800"}`}>
-                        <div className={`mb-1 text-[10px] font-medium ${isA ? "text-blue-200" : "text-gray-400"}`}>{isA ? "你的 Agent" : "对方 Agent"}</div>
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${isA ? "bg-blue-500" : bAvatarBg}`}>{isA ? "A" : "B"}</div>
+                      <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${isA ? "rounded-br-md bg-blue-600 text-white" : bBubbleBg}`}>
+                        <div className={`mb-1 text-[10px] font-medium ${isA ? "text-blue-200" : bLabelColor}`}>{isA ? "你的 Agent" : bLabel}</div>
                         {msg.content}
                       </div>
                     </div>
@@ -140,9 +145,9 @@ function ClassicChatLog({ rounds, liveMessages, logRef }: { rounds: OldRound[]; 
               const isA = msg.role === "AGENT_A";
               return (
                 <div key={msg.id} className={`flex items-end gap-2 ${isA ? "flex-row-reverse" : "flex-row"}`}>
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${isA ? "bg-blue-500" : "bg-gray-400"}`}>{isA ? "A" : "B"}</div>
-                  <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${isA ? "rounded-br-md bg-blue-600 text-white" : "rounded-bl-md bg-gray-100 text-gray-800"}`}>
-                    <div className={`mb-1 text-[10px] font-medium ${isA ? "text-blue-200" : "text-gray-400"}`}>{isA ? "你的 Agent" : "对方 Agent"}</div>
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${isA ? "bg-blue-500" : bAvatarBg}`}>{isA ? "A" : "B"}</div>
+                  <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${isA ? "rounded-br-md bg-blue-600 text-white" : bBubbleBg}`}>
+                    <div className={`mb-1 text-[10px] font-medium ${isA ? "text-blue-200" : bLabelColor}`}>{isA ? "你的 Agent" : bLabel}</div>
                     {msg.content}
                   </div>
                 </div>
@@ -238,6 +243,7 @@ export default function DashboardPage() {
   const [classicDone, setClassicDone] = useState<OldDoneEvent | null>(null);
   const [classicSessionId, setClassicSessionId] = useState<string | null>(null);
   const [classicOpponent, setClassicOpponent] = useState<OldOpponent | null>(null);
+  const [classicConvType, setClassicConvType] = useState<"A2A" | "SIMULATED">("SIMULATED");
   const classicLogRef = useRef<HTMLDivElement>(null);
 
   /* ── 锦标赛模式状态 ── */
@@ -264,12 +270,14 @@ export default function DashboardPage() {
     setClassicLive([]);
     setClassicDone(null);
     setClassicOpponent(null);
+    setClassicConvType("SIMULATED");
 
     const res = await fetch("/api/simulations", { method: "POST" });
     if (!res.ok) { setClassicPhase("idle"); return; }
-    const { sessionId: sid, opponent: opp } = await res.json();
+    const { sessionId: sid, opponent: opp, conversationType: ct } = await res.json();
     setClassicSessionId(sid);
     setClassicOpponent(opp);
+    if (ct) setClassicConvType(ct);
 
     const es = new EventSource(`/api/simulations/${sid}/events`);
     es.addEventListener("message", (e) => {
@@ -312,12 +320,13 @@ export default function DashboardPage() {
     setTournamentId(data.tournamentId);
 
     // 初始化候选人
-    const initCandidates: CandidateInfo[] = data.candidates.map((c: { candidateId: string; displayName: string; mbti: string; agentId: string }) => ({
+    const initCandidates: CandidateInfo[] = data.candidates.map((c: { candidateId: string; displayName: string; mbti: string; agentId: string; source?: string }) => ({
       candidateId: c.candidateId,
       displayName: c.displayName,
       mbti: c.mbti,
       agentId: c.agentId,
       status: "ACTIVE" as const,
+      source: c.source as CandidateInfo["source"],
     }));
     setCandidates(initCandidates);
     if (initCandidates.length > 0) setSelectedCandidateId(initCandidates[0].candidateId);
@@ -446,13 +455,21 @@ export default function DashboardPage() {
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">{classicOpponent.displayName.charAt(0).toUpperCase()}</div>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-gray-800">{classicOpponent.displayName}</div>
-                  <div className="mt-0.5 inline-block rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">{classicOpponent.mbti}</div>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">{classicOpponent.mbti}</span>
+                    {classicConvType === "A2A" && (
+                      <span className="inline-block rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">真实分身</span>
+                    )}
+                    {classicConvType === "SIMULATED" && classicOpponent.source === "BOOK" && (
+                      <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">模拟对话</span>
+                    )}
+                  </div>
                 </div>
-                <div className="ml-auto text-xs text-gray-400">对手 Agent</div>
+                <div className="ml-auto text-xs text-gray-400">{classicConvType === "A2A" ? "对方分身" : "对手 Agent"}</div>
               </div>
             )}
             <ClassicProgressBar rounds={classicRounds} phase={classicPhase} />
-            <ClassicChatLog rounds={classicRounds} liveMessages={classicLive} logRef={classicLogRef} />
+            <ClassicChatLog rounds={classicRounds} liveMessages={classicLive} logRef={classicLogRef} conversationType={classicConvType} />
             {classicDone && <ClassicResultCard doneData={classicDone} sessionId={classicSessionId} onRetry={handleRetry} />}
           </>
         )}

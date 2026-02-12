@@ -4,6 +4,7 @@ import { chatWithSecondMe } from "./secondme";
 import { SCENARIOS, ScenarioKey, GAME_QUESTIONS } from "./prompt-templates";
 import { judgeRoundMultiDim, MultiDimResult, DimensionScores } from "./scoring";
 import { runScenario, AgentData, avg } from "./simulation-engine";
+import { getValidToken } from "./token-manager";
 
 /* ── 淘汰策略 ── */
 const ELIMINATION_TABLE: Record<number, number[]> = {
@@ -25,6 +26,8 @@ interface CandidateRuntime {
   scores: MultiDimResult[];
   totalWeighted: number;
   eliminated: boolean;
+  secondMeToken?: string;
+  source: "REGISTERED" | "BOOK" | "SEED";
 }
 
 /* ── 锦标赛事件发射器（写入数据库供 SSE 轮询） ── */
@@ -61,6 +64,15 @@ export async function runTournament(tournamentId: string, secondMeToken?: string
   // 初始化候选人运行时
   const candidates: CandidateRuntime[] = [];
   for (const c of tournament.candidates) {
+    // 判断候选人来源并获取 token
+    const agentSource = c.agent.source;
+    let candidateToken: string | undefined;
+    if (c.agent.userId && (agentSource === "USER" || agentSource === "REGISTERED")) {
+      candidateToken = (await getValidToken(c.agent.userId)) ?? undefined;
+    }
+
+    const conversationType = candidateToken ? "A2A" : "SIMULATED";
+
     // 为每个候选人创建一个 SimulationSession
     const session = await prisma.simulationSession.create({
       data: {
@@ -71,6 +83,7 @@ export async function runTournament(tournamentId: string, secondMeToken?: string
         candidateId: c.id,
         status: "RUNNING",
         startedAt: new Date(),
+        conversationType,
       },
     });
 
@@ -86,6 +99,8 @@ export async function runTournament(tournamentId: string, secondMeToken?: string
       scores: [],
       totalWeighted: 0,
       eliminated: false,
+      secondMeToken: candidateToken,
+      source: candidateToken ? "REGISTERED" : (agentSource === "BOOK" ? "BOOK" : "SEED"),
     });
   }
 
@@ -257,8 +272,8 @@ async function runDialoguePhase(
 
   const results = await Promise.allSettled(
     candidates.map(async (candidate) => {
-      // 复用 simulation-engine 的 runScenario（Agent A 走 SecondMe）
-      await runScenario(candidate.sessionId, scenarioKey, userAgent, candidate.agent, roundCount, secondMeToken);
+      // 复用 simulation-engine 的 runScenario（Agent A 走 SecondMe，Agent B 若有 token 也走 SecondMe）
+      await runScenario(candidate.sessionId, scenarioKey, userAgent, candidate.agent, roundCount, secondMeToken, candidate.secondMeToken);
 
       // 获取对话记录用于多维评分
       const round = await prisma.simulationRound.findFirst({
@@ -347,11 +362,19 @@ async function runGamePhase(
           data: { roundId: round.id, role: "AGENT_A", content: aReply, seq: seq++ },
         });
 
-        // Agent B 独立作答（SEED 对手，始终走 LLM）
-        const bReply = await chatCompletion([
-          { role: "system", content: `${candidate.agent.promptPersona}\n场景：${scenario.system}\n请独立回答以下问题，不要参考他人答案。` },
-          { role: "user", content: questionText },
-        ]);
+        // Agent B 独立作答（有 token 走 SecondMe，否则走 LLM）
+        let bReply: string;
+        if (candidate.secondMeToken) {
+          const smResultB = await chatWithSecondMe(candidate.secondMeToken, questionText, {
+            systemPrompt: `${scenario.system}\n请独立回答以下问题，不要参考他人答案。`,
+          });
+          bReply = smResultB.reply;
+        } else {
+          bReply = await chatCompletion([
+            { role: "system", content: `${candidate.agent.promptPersona}\n场景：${scenario.system}\n请独立回答以下问题，不要参考他人答案。` },
+            { role: "user", content: questionText },
+          ]);
+        }
         await prisma.roundMessage.create({
           data: { roundId: round.id, role: "AGENT_B", content: bReply, seq: seq++ },
         });
